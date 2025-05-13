@@ -1,0 +1,166 @@
+---
+title: "systematic_literature_datacleaning"
+author: "Paloma Abril Poncela"
+date: "2025-05-13"
+output: html_document
+---
+```{r}
+
+library(readr)
+library(readxl)
+library(dplyr)
+library(janitor)
+
+
+scopus <- read_csv("C:/Users/palom/OneDrive - Istituto Universitario Europeo/Documentos/systematic_literature/combined_scopus.csv") %>%
+  mutate(source_dataset = "scopus")
+
+googlescholar <- read_csv("C:/Users/palom/OneDrive - Istituto Universitario Europeo/Documentos/systematic_literature/googlescholar.csv") %>%
+  mutate(source_dataset = "google")
+
+webofscience_raw <- read_excel("C:/Users/palom/OneDrive - Istituto Universitario Europeo/Documentos/systematic_literature/webofscience.xls") %>%
+  clean_names()
+
+names(scopus)
+names(googlescholar)
+names(webofscience_raw)
+
+webofscience <- webofscience_raw %>%
+  transmute(
+    Cites = as.character(times_cited_wo_s_core),
+    Authors = authors,
+    Title = article_title,
+    Year = publication_year,
+    Source = source_title,
+    Publisher = publisher,
+    ArticleURL = doi_link,
+    CitesURL = NA,
+    GSRank = NA,
+    Type = document_type,
+    DOI = doi,
+    ISSN = issn,
+    CitationURL = NA,
+    Volume = volume,
+    Issue = issue,
+    StartPage = start_page,
+    EndPage = end_page,
+    ECC = NA,
+    CitesPerYear = NA,
+    CitesPerAuthor = NA,
+    AuthorCount = NA,
+    Age = NA,
+    Abstract = abstract,
+    FullTextURL = NA,
+    RelatedURL = NA,
+    source_dataset = "webofscience"
+  )
+
+common_fix <- function(df) {
+  df %>%
+    mutate(across(
+      c(
+        Cites, Volume, Issue, StartPage, EndPage,
+        Year, GSRank, DOI, ISSN
+      ),
+      as.character
+    ))
+}
+
+
+scopus <- scopus %>%
+  common_fix() %>%
+  mutate(source_dataset = "scopus")
+
+googlescholar <- googlescholar %>%
+  common_fix() %>%
+  mutate(source_dataset = "google")
+
+webofscience <- webofscience %>%
+  common_fix()  # already has source_dataset = "webofscience"
+
+
+
+combined_all <- bind_rows(scopus, googlescholar, webofscience)
+
+
+combined_all %>%
+  group_by(source_dataset) %>%
+  summarise(non_missing_doi = sum(!is.na(DOI)))
+```
+
+
+
+
+
+Cleaning duplicates(from same DOI)
+
+```{r}
+
+combined_all_cleaned <- combined_all %>%
+  mutate(priority = case_when(
+    source_dataset == "webofscience" ~ 1,
+    source_dataset == "google" ~ 2,
+    source_dataset == "scopus" ~ 3,
+    TRUE ~ 4  # fallback (just in case)
+  ))
+
+
+combined_all_dedup <- combined_all_cleaned %>%
+  filter(!is.na(DOI)) %>%  # work only on rows with valid DOIs
+  arrange(DOI, priority) %>%
+  distinct(DOI, .keep_all = TRUE)
+
+
+missing_dois <- combined_all_cleaned %>%
+  filter(is.na(DOI))
+
+
+final_combined <- bind_rows(combined_all_dedup, missing_dois)
+
+
+final_combined <- final_combined %>%
+  select(-priority)
+```
+
+
+Cleaning duplicates(from same title)
+
+```{r}
+final_combined <- final_combined %>%
+  mutate(title_lower = tolower(Title))
+
+
+sum(duplicated(final_combined$title_lower))
+
+
+final_combined %>%
+  group_by(title_lower) %>%
+  filter(n() > 1) %>%
+  arrange(title_lower)
+
+
+final_combined_clean <- final_combined %>%
+  mutate(
+    title_lower = tolower(Title),
+    priority = case_when(
+      source_dataset == "webofscience" ~ 1,
+      source_dataset == "google" ~ 2,
+      source_dataset == "scopus" ~ 3,
+      TRUE ~ 4  # catch-all fallback
+    )
+  )
+
+# Step 2: Deduplicate by title_lower with priority
+final_combined_dedup <- final_combined_clean %>%
+  arrange(title_lower, priority) %>%
+  distinct(title_lower, .keep_all = TRUE) %>%
+  select(-priority)  # optional cleanup
+
+
+
+save(final_combined_dedup, file = "C:/Users/palom/OneDrive - Istituto Universitario Europeo/Documentos/systematic_literature/systematic_literature_130525.RData")
+write.csv(final_combined_dedup, file = "C:/Users/palom/OneDrive - Istituto Universitario Europeo/Documentos/systematic_literature/systematic_literature_130525.csv", row.names = FALSE)
+
+```
+
+
