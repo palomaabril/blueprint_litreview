@@ -24,7 +24,7 @@ df_paloma_coded <- read_csv("03_step1_screening_title/df_paloma_coded.csv")
 df_rens_coded <- read_csv("03_step1_screening_title/df_rens_coded.csv")
 abstract_included <- read_csv("03_step1_screening_title/abstracts_included.csv")
 ###########################################################################
-# 1. Merge and create variables for coding
+# 1. Create variables for coding
 ###########################################################################
 df_abstract_to_code <- abstract_included%>%
   rename(abstract = Abstract...5)%>%
@@ -40,5 +40,5 @@ df_abstract_to_code <- abstract_included%>%
     exp_methods = "", # The method relies on experimental or quasi experimental methods
     theoretical_interest = "" # The paper gives theoretical insights
   )
-
+write.csv(df_abstract_to_code, "04_step2_screening_abstract/df_abstract_to_code.csv")
 
